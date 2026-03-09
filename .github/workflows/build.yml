@@ -24,6 +24,7 @@ jobs:
 
       - name: Convert icon to icns
         run: |
+          rm -rf icon.iconset
           mkdir icon.iconset
           sips -z 16 16     icons/icon.png --out icon.iconset/icon_16x16.png
           sips -z 32 32     icons/icon.png --out icon.iconset/icon_16x16@2x.png
