@@ -3,29 +3,21 @@ name: Build AudioWizard
 on:
   push:
     branches: [ main, master ]
-  workflow_dispatch:  # allows manual trigger from GitHub UI
+  workflow_dispatch:
 
 jobs:
   build-macos:
     runs-on: macos-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pyinstaller pillow
-
+        run: pip install -r requirements.txt pyinstaller pillow
       - name: Convert icon to icns
         run: |
-          rm -rf icon.iconset
-          mkdir icon.iconset
+          rm -rf icon.iconset && mkdir icon.iconset
           sips -z 16 16     icons/icon.png --out icon.iconset/icon_16x16.png
           sips -z 32 32     icons/icon.png --out icon.iconset/icon_16x16@2x.png
           sips -z 32 32     icons/icon.png --out icon.iconset/icon_32x32.png
@@ -36,12 +28,10 @@ jobs:
           sips -z 512 512   icons/icon.png --out icon.iconset/icon_256x256@2x.png
           sips -z 512 512   icons/icon.png --out icon.iconset/icon_512x512.png
           iconutil -c icns icon.iconset -o icons/icon.icns
-
       - name: Build macOS app
         run: |
           pyinstaller \
-            --noconfirm \
-            --windowed \
+            --noconfirm --windowed \
             --name "AudioWizard" \
             --icon "icons/icon.icns" \
             --add-data "icons:icons" \
@@ -50,14 +40,9 @@ jobs:
             --hidden-import numpy \
             --osx-bundle-identifier "com.audiowizard.copyrightencoder" \
             main.py
-
       - name: Zip the .app
-        run: |
-          cd dist
-          zip -r AudioWizard-macOS.zip AudioWizard.app
-
-      - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
+        run: cd dist && zip -r AudioWizard-macOS.zip AudioWizard.app
+      - uses: actions/upload-artifact@v4
         with:
           name: AudioWizard-macOS
           path: dist/AudioWizard-macOS.zip
@@ -66,19 +51,12 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pyinstaller pillow
-
+        run: pip install -r requirements.txt pyinstaller pillow
       - name: Convert icon to ico
         run: |
           python -c "
@@ -86,12 +64,10 @@ jobs:
           img = Image.open('icons/icon.png')
           img.save('icons/icon.ico', format='ICO', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
           "
-
       - name: Build Windows exe
         run: |
           pyinstaller `
-            --noconfirm `
-            --windowed `
+            --noconfirm --windowed `
             --name "AudioWizard" `
             --icon "icons/icon.ico" `
             --add-data "icons;icons" `
@@ -99,10 +75,77 @@ jobs:
             --hidden-import scipy `
             --hidden-import numpy `
             main.py
-
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: AudioWizard-Windows
           path: dist/AudioWizard/
+          retention-days: 30
+
+  build-debian-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libglib2.0-0 libgl1 libxcb-xinerama0 libxcb-icccm4 \
+            libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xkb1 \
+            libxkbcommon-x11-0 libegl1 libdbus-1-3
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt pyinstaller
+      - name: Build
+        run: |
+          pyinstaller \
+            --noconfirm --windowed \
+            --name "AudioWizard" \
+            --add-data "icons:icons" \
+            --hidden-import soundfile \
+            --hidden-import scipy \
+            --hidden-import numpy \
+            main.py
+      - name: Package
+        run: cd dist && tar -czf AudioWizard-Linux-Debian-Ubuntu.tar.gz AudioWizard/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AudioWizard-Linux-Debian-Ubuntu
+          path: dist/AudioWizard-Linux-Debian-Ubuntu.tar.gz
+          retention-days: 30
+
+  build-arch:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install system dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm \
+            python python-pip gcc \
+            libxcb xcb-util-wm xcb-util-image xcb-util-keysyms \
+            xcb-util-renderutil libxkbcommon-x11 qt6-base hicolor-icon-theme
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt --break-system-packages
+          pip install pyinstaller --break-system-packages
+      - name: Build
+        run: |
+          pyinstaller \
+            --noconfirm --windowed \
+            --name "AudioWizard" \
+            --add-data "icons:icons" \
+            --hidden-import soundfile \
+            --hidden-import scipy \
+            --hidden-import numpy \
+            main.py
+      - name: Package
+        run: cd dist && tar -czf AudioWizard-Linux-Arch.tar.gz AudioWizard/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AudioWizard-Linux-Arch
+          path: dist/AudioWizard-Linux-Arch.tar.gz
           retention-days: 30
