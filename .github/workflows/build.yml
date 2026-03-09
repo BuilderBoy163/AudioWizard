@@ -1,0 +1,107 @@
+name: Build AudioWizard
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:  # allows manual trigger from GitHub UI
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller pillow
+
+      - name: Convert icon to icns
+        run: |
+          mkdir icon.iconset
+          sips -z 16 16     icons/icon.png --out icon.iconset/icon_16x16.png
+          sips -z 32 32     icons/icon.png --out icon.iconset/icon_16x16@2x.png
+          sips -z 32 32     icons/icon.png --out icon.iconset/icon_32x32.png
+          sips -z 64 64     icons/icon.png --out icon.iconset/icon_32x32@2x.png
+          sips -z 128 128   icons/icon.png --out icon.iconset/icon_128x128.png
+          sips -z 256 256   icons/icon.png --out icon.iconset/icon_128x128@2x.png
+          sips -z 256 256   icons/icon.png --out icon.iconset/icon_256x256.png
+          sips -z 512 512   icons/icon.png --out icon.iconset/icon_256x256@2x.png
+          sips -z 512 512   icons/icon.png --out icon.iconset/icon_512x512.png
+          iconutil -c icns icon.iconset -o icons/icon.icns
+
+      - name: Build macOS app
+        run: |
+          pyinstaller \
+            --noconfirm \
+            --windowed \
+            --name "AudioWizard" \
+            --icon "icons/icon.icns" \
+            --add-data "icons:icons" \
+            --hidden-import soundfile \
+            --hidden-import scipy \
+            --hidden-import numpy \
+            --osx-bundle-identifier "com.audiowizard.copyrightencoder" \
+            main.py
+
+      - name: Zip the .app
+        run: |
+          cd dist
+          zip -r AudioWizard-macOS.zip AudioWizard.app
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AudioWizard-macOS
+          path: dist/AudioWizard-macOS.zip
+          retention-days: 30
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller pillow
+
+      - name: Convert icon to ico
+        run: |
+          python -c "
+          from PIL import Image
+          img = Image.open('icons/icon.png')
+          img.save('icons/icon.ico', format='ICO', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
+          "
+
+      - name: Build Windows exe
+        run: |
+          pyinstaller `
+            --noconfirm `
+            --windowed `
+            --name "AudioWizard" `
+            --icon "icons/icon.ico" `
+            --add-data "icons;icons" `
+            --hidden-import soundfile `
+            --hidden-import scipy `
+            --hidden-import numpy `
+            main.py
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AudioWizard-Windows
+          path: dist/AudioWizard/
+          retention-days: 30
